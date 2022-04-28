@@ -1,5 +1,8 @@
 # limit the number of cpus used by high performance libraries
 import os
+
+
+
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -30,6 +33,10 @@ from yolov5.utils.torch_utils import select_device, time_sync
 from yolov5.utils.plots import Annotator, colors
 from deep_sort.utils.parser import get_config
 from deep_sort.deep_sort import DeepSort
+
+
+from sort.sort import Sort
+
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # yolov5 deepsort root directory
@@ -89,6 +96,7 @@ def detect(opt):
 
     device = select_device(opt.device)
     # initialize deepsort
+    """
     cfg = get_config()
     cfg.merge_from_file(opt.config_deepsort)
     deepsort = DeepSort(cfg.DEEPSORT.REID_CKPT,
@@ -96,6 +104,9 @@ def detect(opt):
                         nms_max_overlap=cfg.DEEPSORT.NMS_MAX_OVERLAP, max_iou_distance=cfg.DEEPSORT.MAX_IOU_DISTANCE,
                         max_age=cfg.DEEPSORT.MAX_AGE, n_init=cfg.DEEPSORT.N_INIT, nn_budget=cfg.DEEPSORT.NN_BUDGET,
                         use_cuda=True)
+    """
+    # create instance of SORT
+    mot_tracker = Sort()
 
     # Initialize
     half &= device.type != 'cpu'  # half precision only supported on CUDA
@@ -223,10 +234,11 @@ def detect(opt):
 
                 # pass detections to deepsort
                 t4 = time_sync()
-                outputs = deepsort.update(xywhs, confs, im0)
+                #outputs = deepsort.update(xywhs, confs, im0)
+                det = det.cpu()
+                outputs = mot_tracker.update(det)
                 t5 = time_sync()
                 dt[3] += t5 - t4
-
                 # draw boxes for visualization
                 if len(outputs) > 0:
                     bbox_xyxy = outputs[:, :4]
@@ -244,12 +256,12 @@ def detect(opt):
                             bbox_h = tlwh_bbox[3]
                             identity = output[-1]
                             with open(txt_path, 'a') as f:
-                                f.write(('%g,' * 9) % (frame_idx, identity, bbox_top,
+                                f.write(('%g,' * 9) % (frame_idx+1, identity, bbox_top,
                                                             bbox_left, bbox_w, bbox_h, -1, -1, -1))  # label format
                                 f.write(('%g' * 1 + '\n') % (-1))  # label format
 
             else:
-                deepsort.increment_ages()
+                #deepsort.increment_ages()
                 LOGGER.info('No detections')
 
             # Stream results
